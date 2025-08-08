@@ -1,4 +1,5 @@
 import numpy as np
+
 import matplotlib.pyplot as plt
 
 def bolzano_method(f, a, b, max_iterations=100, tolerance=1e-6):
@@ -60,7 +61,7 @@ class BolzanoGUI:
         
     def create_widgets(self):
         # Ingreso de la función
-        tk.Label(self.root, text="Función (usar x como variable, ej., x**2 - 4):").pack(pady=5)
+        tk.Label(self.root, text="Función (usar x como variable, puedes usar 'pi' y 'e', ej., x**2 - pi):").pack(pady=5)
         self.func_entry = tk.Entry(self.root, width=40)
         self.func_entry.insert(0, "x**3 - x - 2")
         self.func_entry.pack(pady=5)
@@ -100,15 +101,29 @@ class BolzanoGUI:
         self.result_text = tk.Text(self.root, height=4, width=40)
         self.result_text.pack(pady=5)
         
+    def process_value(self, value_str):
+        """Procesa strings que pueden contener constantes matemáticas"""
+        value_str = value_str.lower().strip()
+        if value_str == 'pi':
+            return np.pi
+        elif value_str == 'e':
+            return np.e
+        try:
+            return float(value_str)
+        except ValueError:
+            raise ValueError(f"Valor no válido: {value_str}")
+
     def calculate(self):
         try:
             # Obtener función desde el string
             func_str = self.func_entry.get()
+            # Reemplazar pi y e en la función por sus valores numéricos
+            func_str = func_str.replace('pi', str(np.pi)).replace('e', str(np.e))
             func = lambda x: eval(func_str.replace('x', 'x'))
             
             # Obtener parámetros
-            a = float(self.a_entry.get())
-            b = float(self.b_entry.get())
+            a = self.process_value(self.a_entry.get())
+            b = self.process_value(self.b_entry.get())
             max_iter = int(self.iter_entry.get())
             tol = float(self.tol_entry.get())
             
