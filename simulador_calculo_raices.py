@@ -3,7 +3,7 @@ import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, Optional
-
+    
 try:
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
     import matplotlib.pyplot as plt
@@ -189,20 +189,53 @@ class RaicesGUI:
                     values = values[:2] + [""] * 3 + values[2:]  # Add empty strings for unused columns
                 self.tree.insert('', 'end', values=tuple(f"{v:.6g}" if isinstance(v, float) else v for v in values))
 
-    def _plot(self, history, func):
-        if not history:
+    def _plot(self, history, func, method='newton'):
+        if not history or not self.ax or not self.canvas:
             return
-        xs_plot = [h[1] for h in history if isinstance(h[1], float)]
+            
+        # Extract x values based on method
+        if method == 'newton':
+            xs_plot = [h[1] for h in history if isinstance(h[1], float)]
+        elif method == 'punto_fijo':
+            xs_plot = [h[1] for h in history if isinstance(h[1], float)]  # x_n values
+            xs_next = [h[2] for h in history if isinstance(h[2], float)]  # x_next values
+        elif method == 'aitken':
+            xs_plot = [h[1] for h in history if isinstance(h[1], float)]  # x_n values
+            xs_next = [h[4] for h in history if isinstance(h[4], float)]  # x_acc values
+            
         if not xs_plot:
             return
-        xmin, xmax = min(xs_plot) - 1, max(xs_plot) + 1
+            
+        # Calculate plot boundaries
+        if method == 'newton':
+            xmin, xmax = min(xs_plot) - 1, max(xs_plot) + 1
+        else:
+            all_x = xs_plot + (xs_next if method != 'newton' else [])
+            xmin, xmax = min(all_x) - 1, max(all_x) + 1
+            
+        # Create plot
         X = [xmin + i*(xmax-xmin)/400 for i in range(401)]
         Y = [func(x) for x in X]
         self.ax.clear()
+        
+        # Plot function
         self.ax.plot(X, Y, label='Función')
         self.ax.axhline(0, color='k', ls='--')
-        self.ax.plot(xs_plot, [func(x) for x in xs_plot], 'o-', label='Iteraciones')
+        
+        # Plot iterations
+        if method == 'newton':
+            self.ax.plot(xs_plot, [func(x) for x in xs_plot], 'o-', label='Iteraciones')
+        elif method == 'punto_fijo':
+            # Plot both x_n and g(x_n) points
+            self.ax.plot(xs_plot, [func(x) for x in xs_plot], 'o-', label='x_n')
+            self.ax.plot(xs_next, [func(x) for x in xs_next], 's-', label='g(x_n)')
+        elif method == 'aitken':
+            # Plot both original and accelerated points
+            self.ax.plot(xs_plot, [func(x) for x in xs_plot], 'o-', label='x_n')
+            self.ax.plot(xs_next, [func(x) for x in xs_next], 's-', label='x_acc')
+            
         self.ax.legend()
+        self.ax.grid(True, linestyle='--', alpha=0.7)
         self.canvas.draw()
 
     def clear_all(self):
@@ -234,6 +267,7 @@ class RaicesGUI:
 
     def run_punto_fijo(self):
         try:
+            f = _make_safe_func(self.expr_var.get())  # Original function
             g = _make_safe_func(self.gexpr_var.get())
             x0 = float(self.x0_var.get())
             tol = float(self.tol_var.get())
@@ -244,9 +278,12 @@ class RaicesGUI:
         root, hist = punto_fijo(g, x0, tol, max_iter)
         self._populate_table(hist, 'punto_fijo')
         self.result_var.set(f"Resultado: {root}" if root else "No convergió")
+        if FigureCanvasTkAgg and plt:
+            self._plot(hist, f, 'punto_fijo')  # Plot using original function f
 
     def run_aitken(self):
         try:
+            f = _make_safe_func(self.expr_var.get())  # Original function
             g = _make_safe_func(self.gexpr_var.get())
             x0 = float(self.x0_var.get())
             tol = float(self.tol_var.get())
@@ -257,6 +294,8 @@ class RaicesGUI:
         root, hist = punto_fijo_aitken(g, x0, tol, max_iter)
         self._populate_table(hist, 'aitken')
         self.result_var.set(f"Resultado (Aitken): {root}" if root else "No convergió")
+        if FigureCanvasTkAgg and plt:
+            self._plot(hist, f, 'aitken')  # Plot using original function f
 
 
 def main():
