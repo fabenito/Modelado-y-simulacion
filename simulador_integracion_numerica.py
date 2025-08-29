@@ -209,7 +209,7 @@ class IntegracionGUI:
     def __init__(self, master: tk.Tk):
         self.master = master
         master.title("Métodos Numéricos - Integración (Newton-Cotes)")
-        master.geometry("900x700")
+        master.geometry("1000x800")
         self._build_widgets()
 
     def _build_widgets(self):
@@ -262,46 +262,33 @@ class IntegracionGUI:
         ttk.Button(button_frame, text="Limpiar", command=self.clear_all).grid(row=0, column=5, padx=5)
 
         # Tabla de resultados
-        self.notebook = ttk.Notebook(frm)
-        self.notebook.grid(row=5, column=0, columnspan=4, sticky='nsew', pady=10)
-        
-        # Tab 1: Tabla de puntos
-        table_frame = ttk.Frame(self.notebook)
-        self.notebook.add(table_frame, text="Puntos de Evaluación")
-        
         cols = ("i", "x_i", "f(x_i)", "coef", "contribución")
-        self.tree = ttk.Treeview(table_frame, columns=cols, show='headings', height=12)
+        self.tree = ttk.Treeview(frm, columns=cols, show='headings', height=8)
         col_widths = {"i": 50, "x_i": 140, "f(x_i)": 140, "coef": 60, "contribución": 140}
         for c in cols:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=col_widths[c], anchor='center')
         
-        scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(frm, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
-        self.tree.grid(row=0, column=0, sticky='nsew')
-        scrollbar.grid(row=0, column=1, sticky='ns')
-        table_frame.grid_rowconfigure(0, weight=1)
-        table_frame.grid_columnconfigure(0, weight=1)
-
-        # Tab 2: Gráfico
-        if FigureCanvasTkAgg and plt:
-            plot_frame = ttk.Frame(self.notebook)
-            self.notebook.add(plot_frame, text="Gráfico")
-            
-            self.fig, self.ax = plt.subplots(figsize=(8, 5))
-            self.canvas = FigureCanvasTkAgg(self.fig, master=plot_frame)
-            self.canvas.get_tk_widget().grid(row=0, column=0, sticky='nsew')
-            plot_frame.grid_rowconfigure(0, weight=1)
-            plot_frame.grid_columnconfigure(0, weight=1)
-        else:
-            self.canvas = None
-            self.ax = None
+        self.tree.grid(row=5, column=0, columnspan=4, sticky='nsew', pady=10)
+        scrollbar.grid(row=5, column=4, sticky='ns', pady=10)
 
         # Resultado
         self.result_var = tk.StringVar(value="Resultado: -")
         result_label = ttk.Label(frm, textvariable=self.result_var, font=('TkDefaultFont', 10, 'bold'))
         result_label.grid(row=6, column=0, columnspan=4, sticky='w', pady=5)
+
+        # Gráfico directamente en el frame principal (como en tu simulador de raíces)
+        if FigureCanvasTkAgg and plt:
+            self.fig, self.ax = plt.subplots(figsize=(8, 4))
+            self.canvas = FigureCanvasTkAgg(self.fig, master=frm)
+            self.canvas.get_tk_widget().grid(row=7, column=0, columnspan=5, pady=10)
+        else:
+            self.canvas = None
+            self.ax = None
+            ttk.Label(frm, text="matplotlib no disponible").grid(row=7, column=0, columnspan=5)
 
     def _populate_table(self, history, h, method='trapezoidal'):
         """Llena la tabla con los puntos de evaluación"""
@@ -330,7 +317,7 @@ class IntegracionGUI:
             self.tree.insert('', 'end', values=values)
 
     def _plot(self, func, a, b, history=None, method='trapezoidal'):
-        """Grafica la función y la aproximación numérica"""
+        """Grafica la función y la aproximación numérica con visualización del área"""
         if not self.ax or not self.canvas:
             return
             
@@ -339,34 +326,129 @@ class IntegracionGUI:
         # Graficar la función original
         x_vals = [a + i * (b - a) / 1000 for i in range(1001)]
         y_vals = [func(x) for x in x_vals]
-        self.ax.plot(x_vals, y_vals, 'b-', linewidth=2, label='f(x)')
+        self.ax.plot(x_vals, y_vals, 'b-', linewidth=2.5, label='f(x)', zorder=3)
         
-        # Graficar los puntos de evaluación y aproximación
+        # Sombrear el área real bajo la curva para referencia
+        self.ax.fill_between(x_vals, 0, y_vals, alpha=0.1, color='blue', label='Área real')
+        
         if history:
             x_points = [point[1] for point in history]
             y_points = [point[2] for point in history]
-            self.ax.plot(x_points, y_points, 'ro', markersize=6, label='Puntos de evaluación')
             
-            # Dibujar aproximación según el método
+            # Dibujar aproximación específica según el método
             if method == 'trapezoidal':
-                self.ax.plot(x_points, y_points, 'r--', alpha=0.7, label='Aproximación trapezoidal')
-                # Sombrear área bajo la aproximación
-                self.ax.fill_between(x_points, 0, y_points, alpha=0.3, color='red')
-            
-            elif 'simpson' in method:
-                # Para Simpson, dibujar una aproximación más suave
-                if len(x_points) >= 3:
-                    self.ax.plot(x_points, y_points, 'g--', alpha=0.7, label=f'Aproximación {method.replace("_", " ").title()}')
-                    self.ax.fill_between(x_points, 0, y_points, alpha=0.3, color='green')
+                self._plot_trapezoidal(x_points, y_points, func)
+            elif method == 'simpson_1_3':
+                self._plot_simpson(x_points, y_points, func, method='1/3')
+            elif method == 'simpson_3_8':
+                self._plot_simpson(x_points, y_points, func, method='3/8')
+            elif method == 'boole':
+                self._plot_boole(x_points, y_points, func)
+            else:
+                # Método genérico para otros casos
+                self.ax.plot(x_points, y_points, 'ro', markersize=6, label='Puntos de evaluación', zorder=4)
+                self.ax.fill_between(x_points, 0, y_points, alpha=0.3, color='red', 
+                                   step='pre', label=f'Aproximación {method}')
         
-        self.ax.axhline(y=0, color='k', linestyle='-', alpha=0.3)
-        self.ax.grid(True, linestyle='--', alpha=0.7)
-        self.ax.legend()
-        self.ax.set_xlabel('x')
-        self.ax.set_ylabel('f(x)')
-        self.ax.set_title(f'Integración Numérica - {method.replace("_", " ").title()}')
+        self.ax.axhline(y=0, color='k', linestyle='-', alpha=0.3, zorder=1)
+        self.ax.grid(True, linestyle='--', alpha=0.4, zorder=1)
+        self.ax.legend(loc='best')
+        self.ax.set_xlabel('x', fontsize=11)
+        self.ax.set_ylabel('f(x)', fontsize=11)
+        self.ax.set_title(f'Integración Numérica - {method.replace("_", " ").title()}', fontsize=12, pad=15)
+        
+        # Ajustar límites del gráfico
+        y_min = min(min(y_vals), 0)
+        y_max = max(max(y_vals), 0)
+        margin = (y_max - y_min) * 0.1
+        self.ax.set_ylim(y_min - margin, y_max + margin)
         
         self.canvas.draw()
+        
+    def _plot_trapezoidal(self, x_points, y_points, func):
+        """Visualización específica para la regla trapezoidal"""
+        # Dibujar puntos de evaluación
+        self.ax.plot(x_points, y_points, 'ro', markersize=6, label='Puntos de evaluación', zorder=4)
+        
+        # Dibujar trapecios individuales
+        for i in range(len(x_points) - 1):
+            x_trap = [x_points[i], x_points[i], x_points[i+1], x_points[i+1]]
+            y_trap = [0, y_points[i], y_points[i+1], 0]
+            self.ax.fill(x_trap, y_trap, alpha=0.4, color='red', edgecolor='darkred', linewidth=1)
+            
+        # Líneas de conexión (aproximación trapezoidal)
+        self.ax.plot(x_points, y_points, 'r--', alpha=0.8, linewidth=1.5, 
+                    label='Aproximación trapezoidal', zorder=3)
+        
+    def _plot_simpson(self, x_points, y_points, func, method='1/3'):
+        """Visualización específica para las reglas de Simpson"""
+        # Dibujar puntos de evaluación
+        self.ax.plot(x_points, y_points, 'go', markersize=6, label='Puntos de evaluación', zorder=4)
+        
+        # Para Simpson, crear una aproximación más suave usando interpolación parabólica
+        if method == '1/3' and len(x_points) >= 3:
+            # Procesar cada par de intervalos (parabólica)
+            for i in range(0, len(x_points)-2, 2):
+                if i+2 < len(x_points):
+                    x_seg = x_points[i:i+3]
+                    y_seg = y_points[i:i+3]
+                    
+                    # Crear interpolación parabólica suave
+                    x_smooth = [x_seg[0] + j * (x_seg[2] - x_seg[0]) / 50 for j in range(51)]
+                    # Interpolación cuadrática simple
+                    y_smooth = []
+                    for x in x_smooth:
+                        # Interpolación de Lagrange de 2do grado
+                        y = (y_seg[0] * (x - x_seg[1]) * (x - x_seg[2]) / 
+                             ((x_seg[0] - x_seg[1]) * (x_seg[0] - x_seg[2])) +
+                             y_seg[1] * (x - x_seg[0]) * (x - x_seg[2]) / 
+                             ((x_seg[1] - x_seg[0]) * (x_seg[1] - x_seg[2])) +
+                             y_seg[2] * (x - x_seg[0]) * (x - x_seg[1]) / 
+                             ((x_seg[2] - x_seg[0]) * (x_seg[2] - x_seg[1])))
+                        y_smooth.append(max(0, y))  # Evitar valores negativos en el área
+                    
+                    # Sombrear área bajo la parábola
+                    self.ax.fill_between(x_smooth, 0, y_smooth, alpha=0.4, color='green')
+                    
+                    if i == 0:  # Solo agregar label una vez
+                        self.ax.plot(x_smooth, y_smooth, 'g--', alpha=0.8, linewidth=1.5,
+                                   label=f'Aproximación Simpson {method}', zorder=3)
+                    else:
+                        self.ax.plot(x_smooth, y_smooth, 'g--', alpha=0.8, linewidth=1.5, zorder=3)
+        else:
+            # Fallback para casos donde no se puede hacer interpolación parabólica
+            self.ax.fill_between(x_points, 0, y_points, alpha=0.4, color='green',
+                               step='pre', label=f'Aproximación Simpson {method}')
+            
+    def _plot_boole(self, x_points, y_points, func):
+        """Visualización específica para la regla de Boole"""
+        # Dibujar puntos de evaluación
+        self.ax.plot(x_points, y_points, 'mo', markersize=6, label='Puntos de evaluación', zorder=4)
+        
+        # Para Boole, procesar cada grupo de 5 puntos (polinomio de 4to grado)
+        if len(x_points) >= 5:
+            for i in range(0, len(x_points)-4, 4):
+                if i+4 < len(x_points):
+                    x_seg = x_points[i:i+5]
+                    y_seg = y_points[i:i+5]
+                    
+                    # Crear una aproximación suave (simplificada)
+                    x_smooth = [x_seg[0] + j * (x_seg[4] - x_seg[0]) / 20 for j in range(21)]
+                    # Interpolación lineal por segmentos como aproximación
+                    y_smooth = [func(x) for x in x_smooth]
+                    
+                    # Sombrear área
+                    self.ax.fill_between(x_smooth, 0, y_smooth, alpha=0.4, color='magenta')
+                    
+                    if i == 0:  # Solo agregar label una vez
+                        self.ax.plot(x_smooth, y_smooth, 'm--', alpha=0.8, linewidth=1.5,
+                                   label='Aproximación Boole', zorder=3)
+                    else:
+                        self.ax.plot(x_smooth, y_smooth, 'm--', alpha=0.8, linewidth=1.5, zorder=3)
+        else:
+            # Fallback
+            self.ax.fill_between(x_points, 0, y_points, alpha=0.4, color='magenta',
+                               step='pre', label='Aproximación Boole')
 
     def clear_all(self):
         """Limpia todos los resultados"""
@@ -376,8 +458,8 @@ class IntegracionGUI:
         
         # Restaurar headers originales
         cols = ("i", "x_i", "f(x_i)", "coef", "contribución")
-        for i, c in enumerate(cols):
-            self.tree.heading(f"#{i+1}", text=c)
+        for c in cols:
+            self.tree.heading(c, text=c)
         
         if self.ax and self.canvas:
             self.ax.clear()
