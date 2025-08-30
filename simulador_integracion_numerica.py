@@ -69,6 +69,25 @@ def _eval_safe_expression(expr: str) -> float:
         raise ValueError(f"Error al evaluar la expresión '{expr}': {str(e)}")
 
 
+def regla_rectangulo(f: Callable[[float], float], a: float, b: float, n: int = 1):
+    """Regla del rectángulo/punto medio (Newton-Cotes de grado 0)"""
+    h = (b - a) / n
+    integral = 0
+    history = []
+    
+    for i in range(n):
+        x_left = a + i * h
+        x_right = a + (i + 1) * h
+        x_mid = (x_left + x_right) / 2  # Punto medio
+        f_mid = f(x_mid)
+        integral += f_mid
+        history.append((i, x_mid, f_mid, 1))
+    
+    integral *= h
+    
+    return integral, history, h
+
+
 def regla_trapezoidal(f: Callable[[float], float], a: float, b: float, n: int = 1):
     """Regla trapezoidal (Newton-Cotes de grado 1)"""
     h = (b - a) / n
@@ -254,12 +273,20 @@ class IntegracionGUI:
         button_frame = ttk.Frame(frm)
         button_frame.grid(row=3, column=0, columnspan=4, pady=10, sticky='we')
         
-        ttk.Button(button_frame, text="Trapezoidal", command=self.run_trapezoidal).grid(row=0, column=0, padx=5)
-        ttk.Button(button_frame, text="Simpson 1/3", command=self.run_simpson_1_3).grid(row=0, column=1, padx=5)
-        ttk.Button(button_frame, text="Simpson 3/8", command=self.run_simpson_3_8).grid(row=0, column=2, padx=5)
-        ttk.Button(button_frame, text="Boole", command=self.run_boole).grid(row=0, column=3, padx=5)
-        ttk.Button(button_frame, text="Adaptativo", command=self.run_adaptativo).grid(row=0, column=4, padx=5)
-        ttk.Button(button_frame, text="Limpiar", command=self.clear_all).grid(row=0, column=5, padx=5)
+        # Primera fila de botones
+        ttk.Button(button_frame, text="Rectángulo", command=self.run_rectangulo).grid(row=0, column=0, padx=3)
+        ttk.Button(button_frame, text="Trapezoidal", command=self.run_trapezoidal).grid(row=0, column=1, padx=3)
+        ttk.Button(button_frame, text="Simpson 1/3", command=self.run_simpson_1_3).grid(row=0, column=2, padx=3)
+        ttk.Button(button_frame, text="Simpson 3/8", command=self.run_simpson_3_8).grid(row=0, column=3, padx=3)
+        
+        # Segunda fila de botones
+        ttk.Button(button_frame, text="Boole", command=self.run_boole).grid(row=1, column=0, padx=3, pady=(5,0))
+        ttk.Button(button_frame, text="Adaptativo", command=self.run_adaptativo).grid(row=1, column=1, padx=3, pady=(5,0))
+        ttk.Button(button_frame, text="Limpiar", command=self.clear_all).grid(row=1, column=2, padx=3, pady=(5,0))
+        
+        # Botón de fórmulas
+        ttk.Button(button_frame, text="📋 Fórmulas", command=self.show_formulas, 
+                  style='Accent.TButton' if hasattr(ttk.Style(), 'theme_names') else None).grid(row=1, column=3, padx=3, pady=(5,0))
 
         # Tabla de resultados
         cols = ("i", "x_i", "f(x_i)", "coef", "contribución")
@@ -336,7 +363,9 @@ class IntegracionGUI:
             y_points = [point[2] for point in history]
             
             # Dibujar aproximación específica según el método
-            if method == 'trapezoidal':
+            if method == 'rectangulo':
+                self._plot_rectangulo(x_points, y_points, func, a, b, len(x_points))
+            elif method == 'trapezoidal':
                 self._plot_trapezoidal(x_points, y_points, func)
             elif method == 'simpson_1_3':
                 self._plot_simpson(x_points, y_points, func, method='1/3')
@@ -364,6 +393,28 @@ class IntegracionGUI:
         self.ax.set_ylim(y_min - margin, y_max + margin)
         
         self.canvas.draw()
+        
+    def _plot_rectangulo(self, x_points, y_points, func, a, b, n):
+        """Visualización específica para la regla del rectángulo/punto medio"""
+        # Dibujar puntos de evaluación (puntos medios)
+        self.ax.plot(x_points, y_points, 'bo', markersize=6, label='Puntos medios', zorder=4)
+        
+        # Dibujar rectángulos individuales
+        h = (b - a) / n
+        for i, (_, x_mid, f_mid, _) in enumerate(zip(range(n), x_points, y_points, [1]*n)):
+            x_left = a + i * h
+            x_right = a + (i + 1) * h
+            
+            # Rectángulo con altura f(x_mid)
+            rectangle = [[x_left, 0], [x_left, f_mid], [x_right, f_mid], [x_right, 0]]
+            rect_x, rect_y = zip(*rectangle)
+            self.ax.fill(rect_x, rect_y, alpha=0.4, color='cyan', edgecolor='darkblue', linewidth=1)
+            
+            # Línea horizontal que muestra la aproximación constante
+            self.ax.plot([x_left, x_right], [f_mid, f_mid], 'b-', alpha=0.8, linewidth=2, zorder=3)
+            
+        # Etiqueta solo una vez
+        self.ax.plot([], [], 'b-', alpha=0.8, linewidth=2, label='Aproximación por rectángulos')
         
     def _plot_trapezoidal(self, x_points, y_points, func):
         """Visualización específica para la regla trapezoidal"""
@@ -465,6 +516,277 @@ class IntegracionGUI:
             self.ax.clear()
             self.canvas.draw()
 
+    def show_formulas(self):
+        """Muestra una ventana con las fórmulas de integración numérica"""
+        formula_window = tk.Toplevel(self.master)
+        formula_window.title("Fórmulas de Integración Numérica - Newton-Cotes")
+        formula_window.geometry("1000x750")
+        formula_window.configure(bg='white')
+        
+        # Crear figura para las fórmulas
+        if plt:
+            # Crear figura más grande para permitir mejor espaciado
+            fig, ax = plt.subplots(figsize=(14, 16))  # Increased height significantly
+            ax.set_xlim(0, 10)
+            ax.set_ylim(0, 15)  # Increased Y limit for more space
+            ax.axis('off')
+            
+            # Título principal
+            ax.text(5, 14.2, 'Fórmulas de Integración Numérica (Newton-Cotes)', 
+                   fontsize=20, fontweight='bold', ha='center',
+                   bbox=dict(boxstyle="round,pad=0.5", facecolor='lightblue', alpha=0.8))
+            
+            # Configurar LaTeX
+            plt.rcParams['text.usetex'] = False  # Usar mathtext de matplotlib
+            
+            # Información general
+            ax.text(5, 13.6, r'Donde: $h = \frac{b-a}{n}$, $n$ = subdivisiones, $\xi \in [a,b]$', 
+                   fontsize=12, ha='center', style='italic', color='gray')
+            
+            # Fórmulas con mucho mejor espaciado
+            y_start = 12.8
+            y_spacing = 2.8  # Much larger spacing between methods
+            
+            # 1. Regla del Rectángulo/Punto Medio
+            y_pos = y_start
+            ax.text(0.5, y_pos, '1. Regla del Rectángulo/Punto Medio (Grado 0)', 
+                   fontsize=16, fontweight='bold', color='darkblue')
+            
+            ax.text(1, y_pos - 0.6, r'$I \approx h \sum_{i=0}^{n-1} f\left(\frac{x_i + x_{i+1}}{2}\right)$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='lightcyan', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Error: $E = \frac{(b-a)^3}{24n^2}f^{(2)}(\xi)$', 
+                   fontsize=12, color='darkblue')
+            
+            # Línea separadora con más espacio
+            ax.plot([0.2, 9.8], [y_pos - 1.8, y_pos - 1.8], 'k-', alpha=0.2, linewidth=1)
+            
+            # 2. Regla Trapezoidal
+            y_pos = y_start - y_spacing
+            ax.text(0.5, y_pos, '2. Regla Trapezoidal (Grado 1)', 
+                   fontsize=16, fontweight='bold', color='darkred')
+            
+            ax.text(1, y_pos - 0.6, r'$I \approx \frac{h}{2}[f(a) + f(b)]$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='mistyrose', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Error: $E = -\frac{(b-a)^3}{12n^2}f^{(2)}(\xi)$', 
+                   fontsize=12, color='darkred')
+            
+            # Línea separadora
+            ax.plot([0.2, 9.8], [y_pos - 1.8, y_pos - 1.8], 'k-', alpha=0.2, linewidth=1)
+            
+            # 3. Simpson 1/3
+            y_pos = y_start - 2 * y_spacing
+            ax.text(0.5, y_pos, '3. Regla de Simpson 1/3 (Grado 2)', 
+                   fontsize=16, fontweight='bold', color='darkgreen')
+            
+            ax.text(1, y_pos - 0.6, r'$I \approx \frac{h}{3}[f(a) + 4f\left(\frac{a+b}{2}\right) + f(b)]$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='lightgreen', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Error: $E = -\frac{(b-a)^5}{180n^4}f^{(4)}(\xi)$', 
+                   fontsize=12, color='darkgreen')
+            
+            # Línea separadora
+            ax.plot([0.2, 9.8], [y_pos - 1.8, y_pos - 1.8], 'k-', alpha=0.2, linewidth=1)
+            
+            # 4. Simpson 3/8
+            y_pos = y_start - 3 * y_spacing
+            ax.text(0.5, y_pos, '4. Regla de Simpson 3/8 (Grado 3)', 
+                   fontsize=16, fontweight='bold', color='darkorange')
+            
+            ax.text(1, y_pos - 0.6, r'$I \approx \frac{3h}{8}[f(x_0) + 3f(x_1) + 3f(x_2) + f(x_3)]$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='peachpuff', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Error: $E = -\frac{3(b-a)^5}{80n^4}f^{(4)}(\xi)$', 
+                   fontsize=12, color='darkorange')
+            
+            # Línea separadora
+            ax.plot([0.2, 9.8], [y_pos - 1.8, y_pos - 1.8], 'k-', alpha=0.2, linewidth=1)
+            
+            # 5. Boole
+            y_pos = y_start - 4 * y_spacing
+            ax.text(0.5, y_pos, '5. Regla de Boole (Grado 4)', 
+                   fontsize=16, fontweight='bold', color='purple')
+            
+            ax.text(1, y_pos - 0.6, r'$I \approx \frac{2h}{45}[7f(x_0) + 32f(x_1) + 12f(x_2) + 32f(x_3) + 7f(x_4)]$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='lavender', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Coeficientes: $\{7, 32, 12, 32, 14, 32, 12, 32, 7\}$ (patrón)', 
+                   fontsize=12, color='purple')
+            
+            ax.text(1, y_pos - 1.5, r'Error: $E = -\frac{8(b-a)^7}{945n^6}f^{(6)}(\xi)$', 
+                   fontsize=12, color='purple')
+            
+            # Línea separadora
+            ax.plot([0.2, 9.8], [y_pos - 2.1, y_pos - 2.1], 'k-', alpha=0.2, linewidth=1)
+            
+            # 6. Adaptativo
+            y_pos = y_start - 5 * y_spacing
+            ax.text(0.5, y_pos, '6. Método Adaptativo (Simpson Recursivo)', 
+                   fontsize=16, fontweight='bold', color='darkblue')
+            
+            ax.text(1, y_pos - 0.6, r'Estimación de error: $E_{est} = \frac{|S_h - S_{2h}|}{15}$', 
+                   fontsize=14, bbox=dict(boxstyle="round,pad=0.4", facecolor='lightcyan', alpha=0.8))
+            
+            ax.text(1, y_pos - 1.1, r'Si $E_{est} < \epsilon$ → aceptar; sino → dividir intervalo', 
+                   fontsize=12, color='darkblue')
+            
+            # Nota final con más espacio
+            ax.text(5, 1.6, '💡 Principio General de Newton-Cotes', 
+                   fontsize=14, fontweight='bold', ha='center', color='navy')
+            ax.text(5, 1.2, 'A mayor grado del polinomio interpolante, mayor precisión', 
+                   fontsize=12, ha='center', style='italic', color='navy')
+            ax.text(5, 0.8, 'Pero también mayor costo computacional y sensibilidad numérica', 
+                   fontsize=12, ha='center', style='italic', color='navy')
+            
+            plt.tight_layout()
+            
+            # Create scrollable frame for the canvas
+            main_frame = ttk.Frame(formula_window)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+            
+            # Create canvas and scrollbar
+            canvas_widget = tk.Canvas(main_frame, bg='white')
+            scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas_widget.yview)
+            scrollable_frame = ttk.Frame(canvas_widget)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas_widget.configure(scrollregion=canvas_widget.bbox("all"))
+            )
+            
+            canvas_widget.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas_widget.configure(yscrollcommand=scrollbar.set)
+            
+            # Integrar matplotlib en el frame scrollable
+            mpl_canvas = FigureCanvasTkAgg(fig, master=scrollable_frame)
+            mpl_canvas.draw()
+            mpl_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            
+            # Pack canvas and scrollbar
+            canvas_widget.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Mouse wheel scrolling
+            def _on_mousewheel(event):
+                canvas_widget.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            canvas_widget.bind("<MouseWheel>", _on_mousewheel)
+            
+            # Frame para botones
+            button_frame = ttk.Frame(formula_window)
+            button_frame.pack(pady=10)
+            
+            # Botones
+            ttk.Button(button_frame, text="Cerrar", 
+                      command=formula_window.destroy).pack(side=tk.LEFT, padx=5)
+            ttk.Button(button_frame, text="Imprimir", 
+                      command=lambda: self._print_formulas(fig)).pack(side=tk.LEFT, padx=5)
+            
+        else:
+            # Fallback si no hay matplotlib - Already scrollable
+            text_frame = ttk.Frame(formula_window)
+            text_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+            
+            text_widget = tk.Text(text_frame, wrap=tk.WORD, font=('Consolas', 11), 
+                                 bg='white', fg='black')
+            scrollbar = ttk.Scrollbar(text_frame, orient='vertical', command=text_widget.yview)
+            text_widget.configure(yscrollcommand=scrollbar.set)
+            
+            text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            formula_text = """
+═══════════════════════════════════════════════════════════════════════════════
+                    FÓRMULAS DE INTEGRACIÓN NUMÉRICA (NEWTON-COTES)
+═══════════════════════════════════════════════════════════════════════════════
+
+Donde: h = (b-a)/n,  n = número de subdivisiones,  ξ ∈ [a,b]
+
+
+───────────────────────────────────────────────────────────────────────────────
+1. REGLA DEL RECTÁNGULO/PUNTO MEDIO (Grado 0)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Fórmula:  I ≈ h∑f((xi + xi+1)/2)  (evaluación en punto medio)
+   
+   Error:    E = (b-a)³f''(ξ)/(24n²)
+
+
+───────────────────────────────────────────────────────────────────────────────
+2. REGLA TRAPEZOIDAL (Grado 1)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Fórmula:  I ≈ (h/2)[f(a) + f(b)]
+   
+   Error:    E = -(b-a)³f''(ξ)/(12n²)
+
+
+───────────────────────────────────────────────────────────────────────────────
+3. REGLA DE SIMPSON 1/3 (Grado 2)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Fórmula:  I ≈ (h/3)[f(a) + 4f((a+b)/2) + f(b)]
+   
+   Error:    E = -(b-a)⁵f⁽⁴⁾(ξ)/(180n⁴)
+
+
+───────────────────────────────────────────────────────────────────────────────
+4. REGLA DE SIMPSON 3/8 (Grado 3)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Fórmula:  I ≈ (3h/8)[f(x₀) + 3f(x₁) + 3f(x₂) + f(x₃)]
+   
+   Error:    E = -3(b-a)⁵f⁽⁴⁾(ξ)/(80n⁴)
+
+
+───────────────────────────────────────────────────────────────────────────────
+5. REGLA DE BOOLE (Grado 4)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Fórmula:      I ≈ (2h/45)[7f(x₀) + 32f(x₁) + 12f(x₂) + 32f(x₃) + 7f(x₄)]
+   
+   Coeficientes: {7, 32, 12, 32, 14, 32, 12, 32, 7} (patrón repetitivo)
+   
+   Error:        E = -8(b-a)⁷f⁽⁶⁾(ξ)/(945n⁶)
+
+
+───────────────────────────────────────────────────────────────────────────────
+6. MÉTODO ADAPTATIVO (Simpson Recursivo)
+───────────────────────────────────────────────────────────────────────────────
+   
+   Estimación de error:  E_est = |S_h - S_2h|/15
+   
+   Criterio:            Si E_est < ε → aceptar; sino → dividir intervalo
+   
+
+═══════════════════════════════════════════════════════════════════════════════
+💡 PRINCIPIO GENERAL:
+   A mayor grado del polinomio interpolante → Mayor precisión
+   Pero también → Mayor costo computacional y sensibilidad numérica
+═══════════════════════════════════════════════════════════════════════════════
+"""
+            text_widget.insert(tk.END, formula_text)
+            text_widget.config(state=tk.DISABLED)
+            
+            # Botón para cerrar
+            ttk.Button(formula_window, text="Cerrar", 
+                      command=formula_window.destroy).pack(pady=10)
+                      
+    def _print_formulas(self, fig):
+        """Guarda las fórmulas como imagen"""
+        try:
+            from tkinter import filedialog
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".png",
+                filetypes=[("PNG files", "*.png"), ("PDF files", "*.pdf"), ("All files", "*.*")]
+            )
+            if filename:
+                fig.savefig(filename, dpi=300, bbox_inches='tight')
+                messagebox.showinfo("Éxito", f"Fórmulas guardadas en: {filename}")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {str(e)}")
+
     def _run_method(self, method_func, method_name):
         """Método genérico para ejecutar cualquier método de integración"""
         try:
@@ -492,6 +814,9 @@ class IntegracionGUI:
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error en el cálculo: {str(e)}")
+
+    def run_rectangulo(self):
+        self._run_method(regla_rectangulo, 'rectangulo')
 
     def run_trapezoidal(self):
         self._run_method(regla_trapezoidal, 'trapezoidal')
