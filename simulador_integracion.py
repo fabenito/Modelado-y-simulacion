@@ -17,9 +17,7 @@ from integracion_numerica.gui import MainWindow
 
 
 def main():
-    """Función principal del simulador."""
     try:
-        # Crear y ejecutar la aplicación
         app = MainWindow()
         app.run()
         

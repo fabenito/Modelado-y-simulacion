@@ -22,7 +22,10 @@ class MainWindow:
         """Inicializa la ventana principal."""
         self.root = tk.Tk()
         self.root.title("Simulador de Integración Numérica - Métodos Newton-Cotes")
-        self.root.geometry("900x700")
+        
+        # Ventana más grande y redimensionable
+        self.root.geometry("1200x800")
+        self.root.minsize(1000, 600)
         self.root.configure(bg='lightgray')
         
         # Variables de entrada
@@ -40,15 +43,57 @@ class MainWindow:
         self._setup_ui()
     
     def _setup_ui(self):
-        """Configura la interfaz de usuario."""
+        """Configura la interfaz de usuario con mejor layout."""
+        # Crear PanedWindow para dividir controles y visualización
+        self.paned_window = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        self.paned_window.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Frame izquierdo para controles (scrollable)
+        self.left_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.left_frame, weight=1)
+        
+        # Frame derecho para visualización
+        self.right_frame = ttk.Frame(self.paned_window)
+        self.paned_window.add(self.right_frame, weight=2)
+        
+        # Agregar scroll al frame izquierdo
+        self._setup_left_scroll()
+        
+        # Crear secciones
         self._create_input_section()
         self._create_method_buttons()
-        self._create_result_section()
         self._create_utility_buttons()
+        self._create_result_section()
+        
+    def _setup_left_scroll(self):
+        """Configura scroll para el panel izquierdo."""
+        # Canvas para scroll en panel izquierdo
+        self.left_canvas = tk.Canvas(self.left_frame, bg='lightgray')
+        self.left_scrollbar = ttk.Scrollbar(self.left_frame, orient="vertical", 
+                                          command=self.left_canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.left_canvas)
+        
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all"))
+        )
+        
+        self.left_canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.left_canvas.configure(yscrollcommand=self.left_scrollbar.set)
+        
+        # Pack
+        self.left_canvas.pack(side="left", fill="both", expand=True)
+        self.left_scrollbar.pack(side="right", fill="y")
+        
+        # Mousewheel binding para scroll suave
+        def _on_mousewheel(event):
+            self.left_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        self.left_canvas.bind_all("<MouseWheel>", _on_mousewheel)
     
     def _create_input_section(self):
         """Crea la sección de entrada de parámetros."""
-        input_frame = ttk.LabelFrame(self.root, text="Parámetros de Integración", 
+        input_frame = ttk.LabelFrame(self.scrollable_frame, text="Parámetros de Integración", 
                                    padding="10")
         input_frame.pack(fill=tk.X, padx=10, pady=5)
         
@@ -90,7 +135,7 @@ class MainWindow:
     
     def _create_method_buttons(self):
         """Crea los botones para cada método de integración."""
-        methods_frame = ttk.LabelFrame(self.root, text="Métodos de Integración", 
+        methods_frame = ttk.LabelFrame(self.scrollable_frame, text="Métodos de Integración", 
                                      padding="10")
         methods_frame.pack(fill=tk.X, padx=10, pady=5)
         
@@ -131,12 +176,15 @@ class MainWindow:
         from .results import ResultDisplay
         from .visualization import IntegrationVisualization
         
-        self.result_display = ResultDisplay(self.root)
-        self.visualization = IntegrationVisualization(self.root)
+        # Resultados en el panel izquierdo (scrollable)
+        self.result_display = ResultDisplay(self.scrollable_frame)
+        
+        # Visualización en el panel derecho (más espacio)
+        self.visualization = IntegrationVisualization(self.right_frame)
     
     def _create_utility_buttons(self):
         """Crea botones utilitarios."""
-        utils_frame = ttk.Frame(self.root)
+        utils_frame = ttk.Frame(self.scrollable_frame)
         utils_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Button(utils_frame, text="Limpiar Tabla", 

@@ -46,23 +46,32 @@ class IntegrationVisualization:
     def _setup_matplotlib_ui(self):
         """Configura la UI con matplotlib."""
         # Marco para la visualización
-        self.viz_frame = ttk.LabelFrame(self.parent, text="Visualización", 
-                                      padding="10")
-        self.viz_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.viz_frame = ttk.LabelFrame(self.parent, text="Visualización Gráfica", 
+                                      padding="5")
+        self.viz_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Crear figura matplotlib
-        self.fig = Figure(figsize=(10, 6), dpi=100)
+        # Crear figura matplotlib con tamaño apropiado
+        self.fig = Figure(figsize=(10, 8), dpi=80, tight_layout=True)
         self.ax = self.fig.add_subplot(111)
         
         # Canvas para integrar matplotlib con tkinter
         self.canvas = FigureCanvasTkAgg(self.fig, self.viz_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        canvas_widget = self.canvas.get_tk_widget()
+        canvas_widget.pack(fill=tk.BOTH, expand=True)
         
         # Configurar estilo inicial
         self.ax.grid(True, alpha=0.3)
-        self.ax.set_xlabel('x', fontsize=12)
-        self.ax.set_ylabel('f(x)', fontsize=12)
-        self.ax.set_title('Integración Numérica', fontsize=14, fontweight='bold')
+        self.ax.set_xlabel('x', fontsize=11)
+        self.ax.set_ylabel('f(x)', fontsize=11)
+        self.ax.set_title('Integración Numérica', fontsize=13, fontweight='bold')
+        
+        # Toolbar de navegación (zoom, pan, etc.)
+        try:
+            from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+            toolbar = NavigationToolbar2Tk(self.canvas, self.viz_frame)
+            toolbar.update()
+        except ImportError:
+            pass  # No hay problema si no está disponible
     
     def _setup_fallback_ui(self):
         """Configura UI alternativa cuando matplotlib no está disponible."""

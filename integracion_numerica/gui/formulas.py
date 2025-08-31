@@ -5,6 +5,7 @@ Ventana de referencia con fórmulas matemáticas y información teórica.
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+from .formula_content import FORMULA_TEXT_CONTENT, METHOD_DESCRIPTIONS, HEADERS
 
 
 class FormulaDisplay:
@@ -212,9 +213,8 @@ class FormulaDisplay:
         text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Contenido de texto
-        formula_text = self._get_text_formulas()
-        text_widget.insert(tk.END, formula_text)
+        # Usar contenido importado desde archivo separado
+        text_widget.insert(tk.END, FORMULA_TEXT_CONTENT)
         text_widget.config(state=tk.DISABLED)
         
         # Botón para cerrar
@@ -223,84 +223,22 @@ class FormulaDisplay:
     
     def _get_text_formulas(self) -> str:
         """Retorna las fórmulas como texto plano."""
-        return """
-═══════════════════════════════════════════════════════════════════════════════
-                    FÓRMULAS DE INTEGRACIÓN NUMÉRICA (NEWTON-COTES)
-═══════════════════════════════════════════════════════════════════════════════
-
-Donde: h = (b-a)/n,  n = número de subdivisiones,  ξ ∈ [a,b]
-
-
-───────────────────────────────────────────────────────────────────────────────
-1. REGLA DEL RECTÁNGULO/PUNTO MEDIO (Grado 0)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Fórmula:  I ≈ h∑f((xi + xi+1)/2)  (evaluación en punto medio)
-   
-   Error:    E = (b-a)³f''(ξ)/(24n²)
-
-
-───────────────────────────────────────────────────────────────────────────────
-2. REGLA TRAPEZOIDAL (Grado 1)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Fórmula:  I ≈ (h/2)[f(a) + f(b)]
-   
-   Error:    E = -(b-a)³f''(ξ)/(12n²)
-
-
-───────────────────────────────────────────────────────────────────────────────
-3. REGLA DE SIMPSON 1/3 (Grado 2)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Fórmula:  I ≈ (h/3)[f(a) + 4f((a+b)/2) + f(b)]
-   
-   Error:    E = -(b-a)⁵f⁽⁴⁾(ξ)/(180n⁴)
-
-
-───────────────────────────────────────────────────────────────────────────────
-4. REGLA DE SIMPSON 3/8 (Grado 3)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Fórmula:  I ≈ (3h/8)[f(x₀) + 3f(x₁) + 3f(x₂) + f(x₃)]
-   
-   Error:    E = -3(b-a)⁵f⁽⁴⁾(ξ)/(80n⁴)
-
-
-───────────────────────────────────────────────────────────────────────────────
-5. REGLA DE BOOLE (Grado 4)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Fórmula:      I ≈ (2h/45)[7f(x₀) + 32f(x₁) + 12f(x₂) + 32f(x₃) + 7f(x₄)]
-   
-   Coeficientes: {7, 32, 12, 32, 14, 32, 12, 32, 7} (patrón repetitivo)
-   
-   Error:        E = -8(b-a)⁷f⁽⁶⁾(ξ)/(945n⁶)
-
-
-───────────────────────────────────────────────────────────────────────────────
-6. MÉTODO ADAPTATIVO (Simpson Recursivo)
-───────────────────────────────────────────────────────────────────────────────
-   
-   Estimación de error:  E_est = |S_h - S_2h|/15
-   
-   Criterio:            Si E_est < ε → aceptar; sino → dividir intervalo
-   
-
-═══════════════════════════════════════════════════════════════════════════════
-💡 PRINCIPIO GENERAL:
-   A mayor grado del polinomio interpolante → Mayor precisión
-   Pero también → Mayor costo computacional y sensibilidad numérica
-═══════════════════════════════════════════════════════════════════════════════
-
-NOTAS IMPORTANTES:
-• El método del Rectángulo es el más simple pero menos preciso
-• Simpson 1/3 requiere n par, Simpson 3/8 requiere n múltiplo de 3
-• Boole requiere n múltiplo de 4
-• El método Adaptativo ajusta automáticamente la precisión
-• Para funciones suaves, métodos de mayor grado son más eficientes
-• Para funciones irregulares, el método adaptativo es recomendable
-"""
+        return FORMULA_TEXT_CONTENT
+    
+    def get_method_description(self, method_key: str) -> dict:
+        """
+        Obtiene la descripción detallada de un método específico.
+        
+        Args:
+            method_key: Clave del método (ej: 'rectangulo', 'simpson_13')
+            
+        Returns:
+            Dict con información del método
+        """
+        return METHOD_DESCRIPTIONS.get(method_key, {
+            'name': 'Método Desconocido',
+            'description': 'No hay información disponible'
+        })
     
     def _save_formulas(self, fig):
         """Guarda las fórmulas como imagen."""

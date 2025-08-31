@@ -9,7 +9,7 @@ Módulos:
 """
 
 __version__ = "2.0.0"
-__author__ = "Modelado y Simulación UADE"
+__author__ = "Equipo n modelado y simulacion 25 - JV"
 
 from .methods import *
 from .utils import *
