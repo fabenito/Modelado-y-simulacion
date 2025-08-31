@@ -6,7 +6,7 @@ Incluye parsing de expresiones matemáticas y validación de funciones.
 import ast
 import math
 import operator
-from typing import Callable, Any
+from typing import Callable, Any, Tuple
 
 
 # Operadores seguros para el parser AST
@@ -142,12 +142,13 @@ def eval_safe_expression(expr: str, variables: dict = None) -> float:
         raise ValueError(f"Error evaluando '{expr}': {str(e)}")
 
 
-def make_safe_function(expr: str) -> Callable[[float], float]:
+def make_safe_function(expr: str, lhopital_points: dict = None) -> Callable[[float], float]:
     """
     Crea una función segura a partir de una expresión matemática string.
     
     Args:
         expr: Expresión matemática que depende de 'x'
+        lhopital_points: Diccionario {x_value: limit_value} para manejar singularidades
     
     Returns:
         Función que evalúa la expresión para valores dados de x
@@ -161,9 +162,18 @@ def make_safe_function(expr: str) -> Callable[[float], float]:
         1.8414709848078965
         >>> f(0.0)
         0.0
+        >>> f_with_lhopital = make_safe_function("sin(x)/x", {0.0: 1.0})
+        >>> f_with_lhopital(0.0)
+        1.0
     """
     def safe_function(x: float) -> float:
         """Función generada automáticamente desde expresión matemática"""
+        # Verificar si x está en los puntos de L'Hôpital (con tolerancia)
+        if lhopital_points:
+            for critical_x, limit_value in lhopital_points.items():
+                if abs(x - critical_x) < 1e-15:
+                    return limit_value
+        
         try:
             return eval_safe_expression(expr, {'x': x})
         except Exception as e:
@@ -172,8 +182,61 @@ def make_safe_function(expr: str) -> Callable[[float], float]:
     # Agregar metadatos útiles
     safe_function.__name__ = f"f(x) = {expr}"
     safe_function._expression = expr
+    safe_function._lhopital_points = lhopital_points or {}
     
     return safe_function
+
+
+def check_for_singularities(expr: str, a: float, b: float) -> Tuple[bool, list, str]:
+    """
+    Verifica si hay singularidades en los límites de integración.
+    
+    Args:
+        expr: Expresión matemática
+        a: Límite inferior
+        b: Límite superior
+        
+    Returns:
+        Tupla (tiene_singularidades, lista_puntos_críticos, mensaje_explicativo)
+    """
+    from .lhopital import LHopitalAnalyzer
+    
+    critical_points = []
+    messages = []
+    
+    # Crear función temporal para verificar
+    temp_func = make_safe_function(expr)
+    
+    # Verificar límite inferior
+    if LHopitalAnalyzer.is_function_undefined_at_point(temp_func, a):
+        pattern = LHopitalAnalyzer.detect_lhopital_pattern(expr, a)
+        if pattern:
+            limit_value = LHopitalAnalyzer.calculate_lhopital_limit(expr, a)
+            if limit_value is not None:
+                critical_points.append((a, limit_value))
+                messages.append(f"Singularidad removible detectada en x={a}: límite = {limit_value}")
+            else:
+                messages.append(f"Singularidad detectada en x={a} pero no se pudo calcular el límite automáticamente")
+        else:
+            messages.append(f"Singularidad no removible detectada en x={a}")
+    
+    # Verificar límite superior  
+    if LHopitalAnalyzer.is_function_undefined_at_point(temp_func, b):
+        pattern = LHopitalAnalyzer.detect_lhopital_pattern(expr, b)
+        if pattern:
+            limit_value = LHopitalAnalyzer.calculate_lhopital_limit(expr, b)
+            if limit_value is not None:
+                critical_points.append((b, limit_value))
+                messages.append(f"Singularidad removible detectada en x={b}: límite = {limit_value}")
+            else:
+                messages.append(f"Singularidad detectada en x={b} pero no se pudo calcular el límite automáticamente")
+        else:
+            messages.append(f"Singularidad no removible detectada en x={b}")
+    
+    has_singularities = len(critical_points) > 0 or len(messages) > 0
+    explanation = "\n".join(messages) if messages else ""
+    
+    return has_singularities, critical_points, explanation
 
 
 def validate_integration_parameters(a: float, b: float, n: int, tol: float = None) -> None:

@@ -9,9 +9,16 @@ from .expressions import (
     format_result,
     calculate_step_size,
     generate_points,
+    check_for_singularities,
     # Aliases para compatibilidad
     _eval_safe_expression,
     _make_safe_func
+)
+
+from .lhopital import (
+    LHopitalAnalyzer,
+    create_lhopital_aware_function,
+    apply_numerical_lhopital
 )
 
 __all__ = [
@@ -21,6 +28,10 @@ __all__ = [
     'format_result',
     'calculate_step_size',
     'generate_points',
+    'check_for_singularities',
+    'LHopitalAnalyzer',
+    'create_lhopital_aware_function',
+    'apply_numerical_lhopital',
     # Compatibility aliases
     '_eval_safe_expression',
     '_make_safe_func'

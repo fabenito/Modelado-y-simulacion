@@ -8,7 +8,7 @@ from tkinter import ttk, messagebox
 from typing import Optional, Callable, Any
 import math
 
-from ..utils import eval_safe_expression, make_safe_function
+from ..utils import eval_safe_expression, make_safe_function, check_for_singularities
 from ..methods import get_all_methods
 
 
@@ -126,12 +126,31 @@ class MainWindow:
         ttk.Entry(input_frame, textvariable=self.tol_var, width=15).grid(row=4, column=1, 
                                                                         sticky="w", padx=5, pady=2)
         
-        # Ayuda
-        help_text = ("Ejemplos: x**2, sin(x), exp(x), log(x)\n"
+        # Ayuda y ejemplos
+        help_text = ("Ejemplos normales: x**2, sin(x), exp(x), log(x)\n"
+                    "Ejemplos L'Hôpital: sin(x)/x, (exp(x)-1)/x, (1-cos(x))/x**2\n"
                     "Límites: números o expresiones como 'pi/2', 'e', 'sqrt(2)'")
         ttk.Label(input_frame, text=help_text, foreground="gray", 
                  font=('Arial', 8)).grid(row=5, column=0, columnspan=2, 
                                        sticky="w", padx=5, pady=2)
+        
+        # Botones de ejemplo rápido
+        examples_frame = ttk.Frame(input_frame)
+        examples_frame.grid(row=6, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        
+        ttk.Label(examples_frame, text="Ejemplos rápidos:", 
+                 font=('Arial', 8, 'bold')).pack(side=tk.LEFT)
+        
+        examples = [
+            ("x²", "x**2", "0", "1"),
+            ("sin(x)/x", "sin(x)/x", "0", "pi"),
+            ("(e^x-1)/x", "(exp(x)-1)/x", "0", "1"),
+        ]
+        
+        for i, (label, expr, a_val, b_val) in enumerate(examples):
+            ttk.Button(examples_frame, text=label, width=8,
+                      command=lambda e=expr, a=a_val, b=b_val: self._set_example(e, a, b)
+                      ).pack(side=tk.LEFT, padx=2)
     
     def _create_method_buttons(self):
         """Crea los botones para cada método de integración."""
@@ -195,19 +214,59 @@ class MainWindow:
         
         ttk.Button(utils_frame, text="Comparar Métodos", 
                   command=self.compare_all_methods).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(utils_frame, text="Ayuda L'Hôpital", 
+                  command=self.show_lhopital_help).pack(side=tk.LEFT, padx=5)
     
     def run_method(self, method_key: str):
         """
-        Ejecuta un método de integración específico.
+        Ejecuta un método de integración específico con detección de singularidades.
         
         Args:
             method_key: Clave del método a ejecutar
         """
         try:
-            # Validar y preparar parámetros
-            func = make_safe_function(self.expr_var.get())
+            # Obtener parámetros básicos
+            expr = self.expr_var.get()
             a = eval_safe_expression(self.a_var.get())
             b = eval_safe_expression(self.b_var.get())
+            
+            # Verificar singularidades en los límites de integración
+            has_singularities, critical_points, explanation = check_for_singularities(expr, a, b)
+            
+            # Crear función con manejo de L'Hôpital si es necesario
+            lhopital_points = {}
+            if has_singularities and critical_points:
+                # Mostrar información sobre singularidades detectadas
+                message = (
+                    "🔍 Análisis de Singularidades\n"
+                    "="+ "\n\n"
+                    f"{explanation}\n\n"
+                    "¿Desea aplicar la regla de L'Hôpital para resolver estas singularidades?\n\n"
+                    "• SÍ: Usar los valores límite calculados\n"
+                    "• NO: Intentar integración sin L'Hôpital (puede fallar)\n"
+                    "• CANCELAR: Abortar cálculo"
+                )
+                
+                # Usar messagebox personalizado con 3 opciones
+                response = messagebox.askyesnocancel(
+                    "Singularidades Detectadas - Regla de L'Hôpital", 
+                    message
+                )
+                
+                if response is None:  # Cancelar
+                    return
+                elif response:  # Sí, aplicar L'Hôpital
+                    lhopital_points = {x: limit_val for x, limit_val in critical_points}
+                    messagebox.showinfo(
+                        "L'Hôpital Aplicado", 
+                        f"Se aplicará L'Hôpital en {len(critical_points)} punto(s):\n" +
+                        "\n".join([f"x={x}: límite={lim}" for x, lim in critical_points])
+                    )
+                # Si respuesta es False (No), continuar sin L'Hôpital
+            
+            # Crear función (con o sin L'Hôpital según la decisión del usuario)
+            func = make_safe_function(expr, lhopital_points)
             
             # Obtener método
             methods = get_all_methods()
@@ -237,6 +296,14 @@ class MainWindow:
                 
                 result = method.integrate(func, a, b, n)
             
+            # Mostrar información adicional si se usó L'Hôpital
+            if lhopital_points:
+                lhopital_info = (
+                    f"✅ Integración completada con L'Hôpital aplicado en:\n" +
+                    "\n".join([f"  • x={x}: f(x) = {lim}" for x, lim in lhopital_points.items()])
+                )
+                messagebox.showinfo("L'Hôpital Aplicado", lhopital_info)
+            
             # Mostrar resultados
             self.result_display.show_result(result, method_key)
             self.visualization.plot_method(func, a, b, result, method_key)
@@ -257,17 +324,38 @@ class MainWindow:
         FormulaDisplay(self.root)
     
     def compare_all_methods(self):
-        """Compara todos los métodos disponibles."""
+        """Compara todos los métodos disponibles con manejo de singularidades."""
         try:
             from ..methods import compare_methods
             
-            func = make_safe_function(self.expr_var.get())
+            expr = self.expr_var.get()
             a = eval_safe_expression(self.a_var.get())
             b = eval_safe_expression(self.b_var.get())
             n = int(self.n_var.get())
             
+            # Verificar singularidades
+            has_singularities, critical_points, explanation = check_for_singularities(expr, a, b)
+            
+            # Manejar L'Hôpital si es necesario
+            lhopital_points = {}
+            if has_singularities and critical_points:
+                message = (
+                    "🔍 Singularidades detectadas para comparación\n"
+                    "=" * 45 + "\n\n"
+                    f"{explanation}\n\n"
+                    "Para comparar métodos de forma consistente:\n"
+                    "¿Aplicar L'Hôpital en todos los métodos?"
+                )
+                
+                response = messagebox.askyesno("L'Hôpital para Comparación", message)
+                if response:
+                    lhopital_points = {x: limit_val for x, limit_val in critical_points}
+            
+            # Crear función
+            func = make_safe_function(expr, lhopital_points)
+            
             # Intentar calcular valor exacto para funciones simples
-            exact_value = self._try_exact_integration(self.expr_var.get(), a, b)
+            exact_value = self._try_exact_integration(expr, a, b)
             
             results = compare_methods(func, a, b, n, exact_value)
             self._show_comparison_results(results)
@@ -334,6 +422,89 @@ class MainWindow:
         
         ttk.Button(comp_window, text="Cerrar", 
                   command=comp_window.destroy).pack(pady=10)
+    
+    def show_lhopital_help(self):
+        """Muestra información sobre el manejo de singularidades con L'Hôpital."""
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Ayuda: Regla de L'Hôpital")
+        help_window.geometry("700x500")
+        help_window.configure(bg='white')
+        
+        # Crear frame con scroll
+        frame = tk.Frame(help_window, bg='white')
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Texto de ayuda
+        help_text = """
+🧮 REGLA DE L'HÔPITAL EN INTEGRACIÓN NUMÉRICA
+═══════════════════════════════════════════════
+
+¿Qué es una singularidad removible?
+───────────────────────────────────────────────
+Una singularidad removible ocurre cuando una función no está definida 
+en un punto, pero tiene un límite finito cuando nos aproximamos a ese punto.
+
+Ejemplo clásico: f(x) = sin(x)/x
+• En x=0: sin(0)/0 = 0/0 (indefinido)
+• Pero lim(x→0) sin(x)/x = 1 (usando L'Hôpital)
+
+¿Cuándo aparece en integración numérica?
+───────────────────────────────────────────────
+• Límite inferior = 0 y función con forma sin(x)/x
+• Funciones con denominadores que se anulan en los límites
+• Formas indeterminadas 0/0 o ∞/∞
+
+Funciones compatibles detectadas automáticamente:
+───────────────────────────────────────────────
+✅ sin(x)/x        → límite en x=0: 1
+✅ sinh(x)/x       → límite en x=0: 1  
+✅ tan(x)/x        → límite en x=0: 1
+✅ (1-cos(x))/x²   → límite en x=0: 1/2
+✅ (eˣ-1)/x        → límite en x=0: 1
+✅ log(1+x)/x      → límite en x=0: 1
+
+¿Cómo funciona en el simulador?
+───────────────────────────────────────────────
+1. 🔍 El sistema detecta automáticamente singularidades
+2. 📊 Calcula el límite usando L'Hôpital cuando es posible
+3. ❓ Pregunta al usuario si desea aplicar la corrección
+4. ✅ Reemplaza el valor problemático con el límite calculado
+5. 📈 Continúa la integración normalmente
+
+Ejemplo de uso:
+───────────────────────────────────────────────
+Función: sin(x)/x
+Límites: [0, π]
+Subdivisions: 10
+
+Sin L'Hôpital → Error: División por cero en x=0
+Con L'Hôpital → f(0) = 1, integración exitosa
+
+Nota: Si rechaza usar L'Hôpital, el cálculo puede fallar o dar 
+resultados incorrectos debido a la división por cero.
+        """
+        
+        text_widget = tk.Text(frame, wrap=tk.WORD, font=('Courier New', 10), 
+                            bg='white', fg='black', relief='flat')
+        text_widget.insert(tk.END, help_text)
+        text_widget.config(state=tk.DISABLED)  # Solo lectura
+        
+        # Scrollbar para el texto
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Botón cerrar
+        ttk.Button(help_window, text="Cerrar", 
+                  command=help_window.destroy).pack(pady=10)
+    
+    def _set_example(self, expr: str, a_val: str, b_val: str):
+        """Establece un ejemplo en los campos de entrada."""
+        self.expr_var.set(expr)
+        self.a_var.set(a_val)
+        self.b_var.set(b_val)
     
     def run(self):
         """Inicia el bucle principal de la aplicación."""
